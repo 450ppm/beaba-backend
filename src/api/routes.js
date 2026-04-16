@@ -16,6 +16,7 @@ const readings     = require('./readings');
 const zigbee       = require('./zigbee');
 const report       = require('./report');
 const exportRouter = require('./export');
+const meters       = require('./meters');
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.use('/rooms',    requireActiveCampaign, rooms);
 router.use('/plugs',    requireActiveCampaign, plugs);
 router.use('/sensors',  requireActiveCampaign, sensors);
 router.use('/readings', requireActiveCampaign, readings);
+router.use('/meters',   requireActiveCampaign, meters);
 router.use('/zigbee',   zigbee);
 router.use('/report',  report);
 router.use('/export',  exportRouter);

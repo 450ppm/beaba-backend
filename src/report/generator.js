@@ -25,6 +25,9 @@ function generateReport(campaignId) {
   const durationMs = new Date(endDate) - new Date(startDate);
   const durationDays = Math.max(1, Math.round(durationMs / (1000 * 60 * 60 * 24)));
 
+  // ── Compteurs (releves debut/fin) ───────────────────────────────────
+  const meters = computeMeters(db, campaignId);
+
   // ── Energie ─────────────────────────────────────────────────────────
   const energy = computeEnergy(db, campaignId, durationDays);
 
@@ -50,11 +53,67 @@ function generateReport(campaignId) {
       duration_days: durationDays,
       status: campaign.status,
     },
+    meters,
     energy,
     top_consumers: topConsumers,
     standby,
     comfort,
     recommendations,
+  };
+}
+
+const GAS_RATE = parseFloat(process.env.GAS_RATE || '0.12');
+const WATER_RATE = parseFloat(process.env.WATER_RATE || '4.0');
+const GAS_KWH_PER_M3 = 11.16;
+
+/**
+ * Calcule la consommation a partir des releves compteurs (debut/fin).
+ */
+function computeMeters(db, campaignId) {
+  const readings = db.prepare(
+    'SELECT * FROM meter_readings WHERE campaign_id = ? ORDER BY meter_type, phase'
+  ).all(campaignId);
+
+  const types = ['electricity', 'gas', 'water'];
+  const result = [];
+  let totalCost = 0;
+
+  for (const type of types) {
+    const startReading = readings.find(r => r.meter_type === type && r.phase === 'start');
+    const endReading = readings.find(r => r.meter_type === type && r.phase === 'end');
+
+    if (!startReading || !endReading) continue;
+
+    const consumption = Math.round((endReading.value - startReading.value) * 100) / 100;
+
+    let cost = 0;
+    let consumptionKwh = null;
+    if (type === 'electricity') {
+      cost = Math.round(consumption * ELECTRICITY_RATE * 100) / 100;
+      consumptionKwh = consumption;
+    } else if (type === 'gas') {
+      consumptionKwh = Math.round(consumption * GAS_KWH_PER_M3 * 100) / 100;
+      cost = Math.round(consumptionKwh * GAS_RATE * 100) / 100;
+    } else if (type === 'water') {
+      cost = Math.round(consumption * WATER_RATE * 100) / 100;
+    }
+
+    totalCost += cost;
+
+    result.push({
+      meter_type: type,
+      start_value: startReading.value,
+      end_value: endReading.value,
+      unit: startReading.unit,
+      consumption,
+      consumption_kwh: consumptionKwh,
+      estimated_cost: cost,
+    });
+  }
+
+  return {
+    readings: result,
+    total_estimated_cost: Math.round(totalCost * 100) / 100,
   };
 }
 

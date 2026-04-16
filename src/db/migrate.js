@@ -131,6 +131,21 @@ function runMigration(database) {
       synced        INTEGER NOT NULL DEFAULT 0
     );
 
+    -- ── Releves compteurs (electricite, gaz, eau) ─────────────────────
+
+    CREATE TABLE IF NOT EXISTS meter_readings (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id   TEXT NOT NULL REFERENCES campaigns(id),
+      meter_type    TEXT NOT NULL CHECK(meter_type IN ('electricity','gas','water')),
+      phase         TEXT NOT NULL CHECK(phase IN ('start','end')),
+      value         REAL NOT NULL,
+      unit          TEXT NOT NULL,
+      photo_path    TEXT,
+      recorded_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      notes         TEXT,
+      UNIQUE(campaign_id, meter_type, phase)
+    );
+
     -- ── Index pour les requetes frequentes ───────────────────────────
 
     CREATE INDEX IF NOT EXISTS idx_rtemp_sensor   ON readings_temp(sensor_id, ts);

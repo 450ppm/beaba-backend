@@ -93,7 +93,34 @@ router.post('/:id/activate', (req, res) => {
 // POST /:id/complete — terminer une campagne
 router.post('/:id/complete', (req, res) => {
   const db = getDb();
-  db.prepare("UPDATE campaigns SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(req.params.id);
+  const campaignId = req.params.id;
+
+  // Verifier que tous les releves compteurs existent (3 types x 2 phases)
+  const readings = db.prepare(
+    'SELECT meter_type, phase FROM meter_readings WHERE campaign_id = ?'
+  ).all(campaignId);
+
+  const required = [
+    { meter_type: 'electricity', phase: 'start' },
+    { meter_type: 'electricity', phase: 'end' },
+    { meter_type: 'gas', phase: 'start' },
+    { meter_type: 'gas', phase: 'end' },
+    { meter_type: 'water', phase: 'start' },
+    { meter_type: 'water', phase: 'end' },
+  ];
+
+  const missing = required.filter(
+    r => !readings.some(rd => rd.meter_type === r.meter_type && rd.phase === r.phase)
+  );
+
+  if (missing.length > 0) {
+    return res.status(400).json({
+      error: 'Releves compteurs manquants',
+      missing: missing.map(m => `${m.meter_type}_${m.phase}`),
+    });
+  }
+
+  db.prepare("UPDATE campaigns SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(campaignId);
   res.json({ ok: true });
 });
 
@@ -101,7 +128,7 @@ router.post('/:id/complete', (req, res) => {
 router.post('/wipe', (req, res) => {
   const db = getDb();
   const tables = [
-    'readings_temp', 'readings_co2', 'readings_power',
+    'readings_temp', 'readings_co2', 'readings_power', 'meter_readings',
     'plugs', 'temp_sensors', 'co2_sensors', 'rooms', 'campaigns'
   ];
   db.exec('PRAGMA foreign_keys = OFF');
