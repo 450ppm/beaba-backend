@@ -31,11 +31,32 @@ if (require.main === module) {
  */
 function runMigration(database) {
   database.exec(`
+    -- ── Utilisateurs ─────────────────────────────────────────────────
+
+    CREATE TABLE IF NOT EXISTS users (
+      id         TEXT PRIMARY KEY,
+      email      TEXT NOT NULL UNIQUE,
+      name       TEXT NOT NULL,
+      role       TEXT NOT NULL DEFAULT 'advisor' CHECK(role IN ('admin','advisor')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      active     INTEGER NOT NULL DEFAULT 1
+    );
+
+    -- ── Tokens d'authentification ────────────────────────────────────
+
+    CREATE TABLE IF NOT EXISTS auth_tokens (
+      token      TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL REFERENCES users(id),
+      expires_at TEXT NOT NULL,
+      used       INTEGER NOT NULL DEFAULT 0
+    );
+
     -- ── Campagnes ──────────────────────────────────────────────────────
 
     CREATE TABLE IF NOT EXISTS campaigns (
       id            TEXT PRIMARY KEY,
       kit_id        TEXT NOT NULL,
+      user_id       TEXT REFERENCES users(id),
       household     TEXT NOT NULL,
       address       TEXT,
       start_date    TEXT NOT NULL,
@@ -156,6 +177,11 @@ function runMigration(database) {
     CREATE INDEX IF NOT EXISTS idx_rpow_synced    ON readings_power(synced, ts);
     CREATE INDEX IF NOT EXISTS idx_campaign_status ON campaigns(status);
   `);
+
+  // Seed admin user
+  database.prepare(`
+    INSERT OR IGNORE INTO users (id, email, name, role) VALUES ('admin-001', 'benoit@450ppm.be', 'Benoit', 'admin')
+  `).run();
 }
 
 module.exports = { runMigration };

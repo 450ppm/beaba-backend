@@ -51,7 +51,10 @@
       "Bash(gh repo:*)",
       "Bash(VITE_API_URL=\"\" npx vite build)",
       "Bash(mkdir -p public)",
-      "Bash(cp -r \"E:/DEPLOY/Beaba-front/dist/\"* public/)"
+      "Bash(cp -r \"E:/DEPLOY/Beaba-front/dist/\"* public/)",
+      "WebFetch(domain:450ppm.eu)",
+      "Bash(node -e \"require\\('./src/lib/jwt'\\); console.log\\('jwt OK'\\)\")",
+      "Bash(node -e \"require\\('./src/lib/email'\\); console.log\\('email OK'\\)\")"
     ]
   }
 }

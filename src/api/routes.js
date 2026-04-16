@@ -6,8 +6,10 @@
 'use strict';
 const { Router } = require('express');
 const { getDb } = require('../db');
-const { requireActiveCampaign } = require('./middleware');
+const { requireAuth, requireAdmin, requireActiveCampaign } = require('./middleware');
 
+const auth         = require('./auth');
+const users        = require('./users');
 const campaign     = require('./campaign');
 const rooms        = require('./rooms');
 const plugs        = require('./plugs');
@@ -20,21 +22,29 @@ const meters       = require('./meters');
 
 const router = Router();
 
-// ── Sous-routeurs ────────────────────────────────────────────────────
+// ── Auth (public) ────────────────────────────────────────────────────
 
-router.use('/campaign', campaign);
-router.use('/rooms',    requireActiveCampaign, rooms);
-router.use('/plugs',    requireActiveCampaign, plugs);
-router.use('/sensors',  requireActiveCampaign, sensors);
-router.use('/readings', requireActiveCampaign, readings);
-router.use('/meters',   requireActiveCampaign, meters);
-router.use('/zigbee',   zigbee);
-router.use('/report',  report);
-router.use('/export',  exportRouter);
+router.use('/auth', auth);
+
+// ── Users (admin seulement) ──────────────────────────────────────────
+
+router.use('/users', requireAuth, requireAdmin, users);
+
+// ── Sous-routeurs (authentifies) ─────────────────────────────────────
+
+router.use('/campaign', requireAuth, campaign);
+router.use('/rooms',    requireAuth, requireActiveCampaign, rooms);
+router.use('/plugs',    requireAuth, requireActiveCampaign, plugs);
+router.use('/sensors',  requireAuth, requireActiveCampaign, sensors);
+router.use('/readings', requireAuth, requireActiveCampaign, readings);
+router.use('/meters',   requireAuth, requireActiveCampaign, meters);
+router.use('/zigbee',   requireAuth, zigbee);
+router.use('/report',   requireAuth, report);
+router.use('/export',   requireAuth, exportRouter);
 
 // ── Cartographie consolidee (garde sa place ici) ─────────────────────
 
-router.get('/map', requireActiveCampaign, (req, res) => {
+router.get('/map', requireAuth, requireActiveCampaign, (req, res) => {
   const db = getDb();
   const campaignId = req.campaign.id;
 

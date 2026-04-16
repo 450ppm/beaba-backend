@@ -23,8 +23,11 @@ function getDb() {
   return _db;
 }
 
-function getActiveCampaign() {
+function getActiveCampaign(userId) {
   const db = getDb();
+  if (userId) {
+    return db.prepare("SELECT * FROM campaigns WHERE status IN ('setup','active') AND user_id = ? ORDER BY created_at DESC LIMIT 1").get(userId) || null;
+  }
   return db.prepare("SELECT * FROM campaigns WHERE status IN ('setup','active') ORDER BY created_at DESC LIMIT 1").get() || null;
 }
 

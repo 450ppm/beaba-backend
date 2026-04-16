@@ -10,9 +10,10 @@
 'use strict';
 require('dotenv').config();
 
-const path     = require('path');
-const express  = require('express');
-const cors     = require('cors');
+const path         = require('path');
+const express      = require('express');
+const cors         = require('cors');
+const cookieParser = require('cookie-parser');
 const cron     = require('node-cron');
 const mqtt     = require('./mqtt/subscriber');
 const poller   = require('./mqtt/poller');
@@ -24,8 +25,9 @@ const routes   = require('./api/routes');
 // ── Express ───────────────────────────────────────────────────────────
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 app.use('/api', routes);
 
 // ── Frontend statique ────────────────────────────────────────────────

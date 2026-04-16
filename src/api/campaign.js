@@ -13,7 +13,8 @@ const router = Router();
 
 // GET / — campagne active (ou 404)
 router.get('/', (req, res) => {
-  const campaign = getActiveCampaign();
+  const userId = req.user.role !== 'admin' ? req.user.id : null;
+  const campaign = getActiveCampaign(userId);
   if (!campaign) return res.status(404).json({ error: 'Aucune campagne active' });
   res.json(campaign);
 });
@@ -27,17 +28,22 @@ router.post('/', (req, res) => {
 
   const db = getDb();
 
-  // Verifier qu'aucune campagne non-completed n'existe
-  const existing = db.prepare("SELECT id FROM campaigns WHERE status IN ('setup','active')").get();
+  // Verifier qu'aucune campagne non-completed n'existe pour cet utilisateur
+  const existingQuery = req.user.role === 'admin'
+    ? "SELECT id FROM campaigns WHERE status IN ('setup','active')"
+    : "SELECT id FROM campaigns WHERE status IN ('setup','active') AND user_id = ?";
+  const existing = req.user.role === 'admin'
+    ? db.prepare(existingQuery).get()
+    : db.prepare(existingQuery).get(req.user.id);
   if (existing) {
     return res.status(409).json({ error: 'Une campagne non terminee existe deja', campaign_id: existing.id });
   }
 
   const id = crypto.randomUUID();
   db.prepare(`
-    INSERT INTO campaigns (id, kit_id, household, address, start_date, expected_days, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, kit_id || 'beaba_001', household, address || null, start_date, expected_days || 30, notes || null);
+    INSERT INTO campaigns (id, kit_id, user_id, household, address, start_date, expected_days, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, kit_id || 'beaba_001', req.user.id, household, address || null, start_date, expected_days || 30, notes || null);
 
   res.status(201).json({ id });
 });
@@ -64,6 +70,9 @@ router.post('/:id/activate', (req, res) => {
 
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
   if (!campaign) return res.status(404).json({ error: 'Campagne introuvable' });
+  if (req.user.role !== 'admin' && campaign.user_id !== req.user.id) {
+    return res.status(403).json({ error: 'Acces interdit' });
+  }
   if (campaign.status === 'completed') return res.status(400).json({ error: 'Campagne deja terminee' });
 
   // Verifier qu'au moins 1 room existe
@@ -95,6 +104,12 @@ router.post('/:id/complete', (req, res) => {
   const db = getDb();
   const campaignId = req.params.id;
 
+  const campaignCheck = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
+  if (!campaignCheck) return res.status(404).json({ error: 'Campagne introuvable' });
+  if (req.user.role !== 'admin' && campaignCheck.user_id !== req.user.id) {
+    return res.status(403).json({ error: 'Acces interdit' });
+  }
+
   // Verifier que tous les releves compteurs existent (3 types x 2 phases)
   const readings = db.prepare(
     'SELECT meter_type, phase FROM meter_readings WHERE campaign_id = ?'
@@ -124,12 +139,17 @@ router.post('/:id/complete', (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /wipe — tout supprimer et recreer le schema
+// POST /wipe — tout supprimer et recreer le schema (admin seulement)
 router.post('/wipe', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Acces reserve aux administrateurs' });
+  }
+
   const db = getDb();
   const tables = [
+    'auth_tokens',
     'readings_temp', 'readings_co2', 'readings_power', 'meter_readings',
-    'plugs', 'temp_sensors', 'co2_sensors', 'rooms', 'campaigns'
+    'plugs', 'temp_sensors', 'co2_sensors', 'rooms', 'campaigns', 'users'
   ];
   db.exec('PRAGMA foreign_keys = OFF');
   for (const t of tables) {
