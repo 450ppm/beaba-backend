@@ -17,6 +17,9 @@ let _activeCampaign = null;
 let _campaignCheckTimer = null;
 let _deviceList = [];
 
+// Cache anti-doublons : stocke le dernier {value, timestamp} par capteur/prise
+const _lastValues = {};
+
 // ── Accesseurs device discovery ──────────────────────────────────────
 
 function getDevices() {
@@ -31,9 +34,27 @@ function requestDevices() {
 
 // ── Handlers par type de capteur ─────────────────────────────────────
 
+// Verifie si on doit enregistrer (evite les doublons)
+function shouldRecord(key, value) {
+  const now = Date.now();
+  const last = _lastValues[key];
+  if (!last) {
+    _lastValues[key] = { value, ts: now };
+    return true;
+  }
+  // Enregistrer si la valeur a change OU si plus de 25s se sont ecoulees
+  if (value !== last.value || (now - last.ts) > 25000) {
+    _lastValues[key] = { value, ts: now };
+    return true;
+  }
+  return false;
+}
+
 function handleTempSensor(db, sensorId, campaignId, payload) {
   const { temperature, humidity, battery } = payload;
   if (temperature == null || humidity == null) return;
+
+  if (!shouldRecord(`temp_${sensorId}`, `${temperature}_${humidity}`)) return;
 
   db.prepare(`
     INSERT INTO readings_temp (sensor_id, campaign_id, temperature_c, humidity_pct, battery_pct)
@@ -45,6 +66,8 @@ function handleCo2Sensor(db, sensorId, campaignId, payload) {
   const { co2, temperature, humidity } = payload;
   if (co2 == null) return;
 
+  if (!shouldRecord(`co2_${sensorId}`, `${co2}_${temperature}`)) return;
+
   db.prepare(`
     INSERT INTO readings_co2 (sensor_id, campaign_id, co2_ppm, temperature_c, humidity_pct)
     VALUES (?, ?, ?, ?, ?)
@@ -54,6 +77,8 @@ function handleCo2Sensor(db, sensorId, campaignId, payload) {
 function handlePlug(db, plugId, campaignId, payload) {
   const { power, energy } = payload;
   if (power == null) return;
+
+  if (!shouldRecord(`power_${plugId}`, power)) return;
 
   db.prepare(`
     INSERT INTO readings_power (plug_id, campaign_id, power_w, energy_kwh)
