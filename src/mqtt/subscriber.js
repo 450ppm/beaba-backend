@@ -163,4 +163,6 @@ function stop() {
   if (client) client.end();
 }
 
-module.exports = { start, stop, getDevices, requestDevices };
+function getClient() { return client; }
+
+module.exports = { start, stop, getClient, getDevices, requestDevices };
