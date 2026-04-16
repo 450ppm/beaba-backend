@@ -89,7 +89,8 @@ function runMigration(database) {
       shelly_channel  INTEGER,
       appliance_name  TEXT NOT NULL,
       rated_power_w   INTEGER,
-      sort_order      INTEGER NOT NULL DEFAULT 0
+      sort_order      INTEGER NOT NULL DEFAULT 0,
+      energy_offset_kwh REAL DEFAULT 0
     );
 
     -- ── Releves temperature / humidite ────────────────────────────────

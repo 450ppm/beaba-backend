@@ -72,6 +72,20 @@ router.post('/:id/activate', (req, res) => {
     return res.status(400).json({ error: 'Au moins une piece est requise avant activation' });
   }
 
+  // Capturer l'offset energy de chaque prise (valeur cumulee actuelle)
+  // Pour calculer la conso de la campagne = energy_actuel - energy_offset
+  const plugs = db.prepare("SELECT id, zigbee_id FROM plugs WHERE campaign_id = ?").all(campaignId);
+  const lastReadings = db.prepare(`
+    SELECT plug_id, energy_kwh FROM readings_power
+    WHERE plug_id = ? ORDER BY ts DESC LIMIT 1
+  `);
+  plugs.forEach((plug) => {
+    const last = lastReadings.get(plug.id);
+    if (last && last.energy_kwh != null) {
+      db.prepare('UPDATE plugs SET energy_offset_kwh = ? WHERE id = ?').run(last.energy_kwh, plug.id);
+    }
+  });
+
   db.prepare("UPDATE campaigns SET status = 'active' WHERE id = ?").run(campaignId);
   res.json({ ok: true });
 });

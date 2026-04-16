@@ -71,16 +71,19 @@ function computeEnergy(db, campaignId, durationDays) {
   let totalKwh;
 
   if (hasEnergyKwh > 10) {
-    // Utiliser energy_kwh : delta entre premier et dernier releve par jour et par plug
+    // Utiliser energy_kwh corrige par l'offset de debut de campagne
+    // Conso reelle = energy_kwh_actuel - energy_offset_kwh
     dailySeries = db.prepare(`
       SELECT date(ts) AS date,
         SUM(day_kwh) AS kwh
       FROM (
-        SELECT plug_id, date(ts) AS day_date, ts,
-          MAX(energy_kwh) - MIN(energy_kwh) AS day_kwh
-        FROM readings_power
-        WHERE campaign_id = ? AND energy_kwh IS NOT NULL
-        GROUP BY plug_id, date(ts)
+        SELECT rp.plug_id, date(rp.ts) AS day_date,
+          MAX(rp.energy_kwh - COALESCE(p.energy_offset_kwh, 0))
+          - MIN(rp.energy_kwh - COALESCE(p.energy_offset_kwh, 0)) AS day_kwh
+        FROM readings_power rp
+        JOIN plugs p ON p.id = rp.plug_id
+        WHERE rp.campaign_id = ? AND rp.energy_kwh IS NOT NULL
+        GROUP BY rp.plug_id, date(rp.ts)
       )
       GROUP BY date
       ORDER BY date
@@ -139,11 +142,13 @@ function computeTopConsumers(db, campaignId, totalKwh) {
         COALESCE(r.name, '') AS room_name,
         SUM(day_kwh) AS total_kwh
       FROM (
-        SELECT plug_id,
-          MAX(energy_kwh) - MIN(energy_kwh) AS day_kwh
-        FROM readings_power
-        WHERE campaign_id = ? AND energy_kwh IS NOT NULL
-        GROUP BY plug_id, date(ts)
+        SELECT rp.plug_id,
+          MAX(rp.energy_kwh - COALESCE(p2.energy_offset_kwh, 0))
+          - MIN(rp.energy_kwh - COALESCE(p2.energy_offset_kwh, 0)) AS day_kwh
+        FROM readings_power rp
+        JOIN plugs p2 ON p2.id = rp.plug_id
+        WHERE rp.campaign_id = ? AND rp.energy_kwh IS NOT NULL
+        GROUP BY rp.plug_id, date(rp.ts)
       ) sub
       JOIN plugs p ON p.id = sub.plug_id
       LEFT JOIN rooms r ON r.id = p.room_id
