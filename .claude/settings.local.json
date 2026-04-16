@@ -47,7 +47,11 @@
       "Bash(node -e ':*)",
       "Bash(node -e \"require\\('./src/api/routes'\\); console.log\\('All routes OK'\\)\")",
       "Bash(node -e \"require\\('./src/report/generator'\\); console.log\\('Generator OK'\\)\")",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(gh repo:*)",
+      "Bash(VITE_API_URL=\"\" npx vite build)",
+      "Bash(mkdir -p public)",
+      "Bash(cp -r \"E:/DEPLOY/Beaba-front/dist/\"* public/)"
     ]
   }
 }

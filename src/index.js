@@ -10,6 +10,7 @@
 'use strict';
 require('dotenv').config();
 
+const path     = require('path');
 const express  = require('express');
 const cors     = require('cors');
 const cron     = require('node-cron');
@@ -25,6 +26,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/api', routes);
+
+// ── Frontend statique ────────────────────────────────────────────────
+const publicDir = path.join(__dirname, '..', 'public');
+app.use(express.static(publicDir));
+app.get(/^\/(?!api\/).*/, (req, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
 
 app.get('/health', (req, res) => {
   const campaign = getActiveCampaign();
