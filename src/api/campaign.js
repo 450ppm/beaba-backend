@@ -11,11 +11,16 @@ const { runMigration } = require('../db/migrate');
 
 const router = Router();
 
-// GET / — campagne active (ou 404)
+// GET / — campagne la plus recente (active, setup ou completed)
 router.get('/', (req, res) => {
-  const userId = req.user.role !== 'admin' ? req.user.id : null;
-  const campaign = getActiveCampaign(userId);
-  if (!campaign) return res.status(404).json({ error: 'Aucune campagne active' });
+  const db = getDb();
+  let campaign;
+  if (req.user.role === 'admin') {
+    campaign = db.prepare("SELECT * FROM campaigns ORDER BY created_at DESC LIMIT 1").get();
+  } else {
+    campaign = db.prepare("SELECT * FROM campaigns WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").get(req.user.id);
+  }
+  if (!campaign) return res.status(404).json({ error: 'Aucune campagne' });
   res.json(campaign);
 });
 
