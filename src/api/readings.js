@@ -9,20 +9,21 @@ const { getDb } = require('../db');
 
 const router = Router();
 
-// GET /temp — dernier releve de chaque capteur temp
+// GET /temp — dernier releve de chaque capteur temp (1 seul par capteur)
 router.get('/temp', (req, res) => {
   const db = getDb();
   const campaignId = req.campaign.id;
   const rows = db.prepare(`
-    SELECT t.*, s.name AS sensor_name, s.room_id
+    SELECT t.id, t.sensor_id, t.campaign_id, t.ts, t.temperature_c, t.humidity_pct, t.battery_pct, t.synced,
+           s.name AS sensor_name, s.room_id
     FROM readings_temp t
     INNER JOIN temp_sensors s ON s.id = t.sensor_id
     WHERE t.campaign_id = ?
-      AND t.ts = (
-        SELECT MAX(t2.ts) FROM readings_temp t2 WHERE t2.sensor_id = t.sensor_id
+      AND t.id = (
+        SELECT t2.id FROM readings_temp t2 WHERE t2.sensor_id = t.sensor_id AND t2.campaign_id = ? ORDER BY t2.ts DESC, t2.id DESC LIMIT 1
       )
     ORDER BY s.room_id
-  `).all(campaignId);
+  `).all(campaignId, campaignId);
   res.json(rows);
 });
 
@@ -40,18 +41,21 @@ router.get('/co2', (req, res) => {
   res.json(rows);
 });
 
-// GET /power — puissance instantanee par prise
+// GET /power — puissance instantanee par prise (1 seul par prise)
 router.get('/power', (req, res) => {
   const db = getDb();
   const campaignId = req.campaign.id;
   const rows = db.prepare(`
-    SELECT r.*, p.appliance_name, p.room_id, p.source
+    SELECT r.id, r.plug_id, r.campaign_id, r.ts, r.power_w, r.energy_kwh, r.synced,
+           p.appliance_name, p.room_id, p.source
     FROM readings_power r
     INNER JOIN plugs p ON p.id = r.plug_id
     WHERE r.campaign_id = ?
-      AND r.ts = (SELECT MAX(r2.ts) FROM readings_power r2 WHERE r2.plug_id = r.plug_id)
+      AND r.id = (
+        SELECT r2.id FROM readings_power r2 WHERE r2.plug_id = r.plug_id AND r2.campaign_id = ? ORDER BY r2.ts DESC, r2.id DESC LIMIT 1
+      )
     ORDER BY r.power_w DESC
-  `).all(campaignId);
+  `).all(campaignId, campaignId);
   res.json(rows);
 });
 
