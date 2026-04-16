@@ -76,4 +76,119 @@ router.get('/power/history', (req, res) => {
   res.json(rows);
 });
 
+// GET /power/daily — consommation journaliere agregee
+router.get('/power/daily', (req, res) => {
+  const db = getDb();
+  const campaignId = req.campaign.id;
+
+  const now = new Date();
+  const from = req.query.from || new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
+  const to   = req.query.to   || now.toISOString().slice(0, 10);
+
+  // Pour chaque jour et chaque prise, on prend le delta energy_kwh (max - min)
+  // Si energy_kwh n'est pas dispo, on estime via power_w moyen * duree
+  const rows = db.prepare(`
+    SELECT
+      date(r.ts) AS date,
+      r.plug_id,
+      p.appliance_name,
+      CASE
+        WHEN MAX(r.energy_kwh) IS NOT NULL AND MIN(r.energy_kwh) IS NOT NULL
+          THEN MAX(r.energy_kwh) - MIN(r.energy_kwh)
+        ELSE AVG(r.power_w) * 24.0 / 1000.0 * (
+          CAST((julianday(MAX(r.ts)) - julianday(MIN(r.ts))) * 24 AS REAL) / 24.0
+        )
+      END AS kwh
+    FROM readings_power r
+    INNER JOIN plugs p ON p.id = r.plug_id
+    WHERE r.campaign_id = ?
+      AND date(r.ts) BETWEEN ? AND ?
+    GROUP BY date(r.ts), r.plug_id
+    ORDER BY date(r.ts) ASC
+  `).all(campaignId, from, to);
+
+  // Regrouper par date
+  const byDate = {};
+  for (const row of rows) {
+    if (!byDate[row.date]) {
+      byDate[row.date] = { date: row.date, total_kwh: 0, plugs: [] };
+    }
+    const kwh = Math.max(0, row.kwh || 0);
+    byDate[row.date].total_kwh += kwh;
+    byDate[row.date].plugs.push({
+      plug_id: row.plug_id,
+      appliance_name: row.appliance_name,
+      kwh: Math.round(kwh * 1000) / 1000,
+    });
+  }
+
+  for (const d of Object.values(byDate)) {
+    d.total_kwh = Math.round(d.total_kwh * 1000) / 1000;
+  }
+
+  res.json(Object.values(byDate));
+});
+
+// GET /temp/history — historique temperature/humidite pour graphiques
+router.get('/temp/history', (req, res) => {
+  const db = getDb();
+  const campaignId = req.campaign.id;
+  const { sensor_id, interval } = req.query;
+  const groupBy = interval === 'day' ? 'date' : 'hour';
+
+  const now = new Date();
+  const from = req.query.from || new Date(now.getTime() - 86400000).toISOString();
+  const to   = req.query.to   || now.toISOString();
+
+  const timeExpr = groupBy === 'date'
+    ? "date(r.ts)"
+    : "strftime('%Y-%m-%d %H:00:00', r.ts)";
+
+  let sql = `
+    SELECT
+      ${timeExpr} AS ts,
+      r.sensor_id,
+      s.name AS sensor_name,
+      rm.name AS room_name,
+      ROUND(AVG(r.temperature_c), 1) AS temperature_c,
+      ROUND(AVG(r.humidity_pct), 1) AS humidity_pct
+    FROM readings_temp r
+    INNER JOIN temp_sensors s ON s.id = r.sensor_id
+    LEFT JOIN rooms rm ON rm.id = s.room_id
+    WHERE r.campaign_id = ?
+      AND r.ts >= ?
+      AND r.ts <= ?
+  `;
+  const params = [campaignId, from, to];
+
+  if (sensor_id) {
+    sql += ' AND r.sensor_id = ?';
+    params.push(sensor_id);
+  }
+
+  sql += ` GROUP BY ${timeExpr}, r.sensor_id ORDER BY ts ASC`;
+
+  const rows = db.prepare(sql).all(...params);
+  res.json(rows);
+});
+
+// GET /power/realtime — dernières N minutes de puissance pour graphique temps reel
+router.get('/power/realtime', (req, res) => {
+  const db = getDb();
+  const campaignId = req.campaign.id;
+  const minutes = Math.min(parseInt(req.query.minutes, 10) || 60, 2880);
+  const since = new Date(Date.now() - minutes * 60000).toISOString();
+
+  const rows = db.prepare(`
+    SELECT r.ts, r.plug_id, p.appliance_name, r.power_w
+    FROM readings_power r
+    INNER JOIN plugs p ON p.id = r.plug_id
+    WHERE r.campaign_id = ?
+      AND r.ts >= ?
+    ORDER BY r.ts ASC
+  `).all(campaignId, since);
+
+  res.json(rows);
+});
+
 module.exports = router;
