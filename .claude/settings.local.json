@@ -54,7 +54,18 @@
       "Bash(cp -r \"E:/DEPLOY/Beaba-front/dist/\"* public/)",
       "WebFetch(domain:450ppm.eu)",
       "Bash(node -e \"require\\('./src/lib/jwt'\\); console.log\\('jwt OK'\\)\")",
-      "Bash(node -e \"require\\('./src/lib/email'\\); console.log\\('email OK'\\)\")"
+      "Bash(node -e \"require\\('./src/lib/email'\\); console.log\\('email OK'\\)\")",
+      "Bash(curl -sL -o logo-bruxelles-env.png \"https://450ppm.eu/wp-content/uploads/2025/01/Bruxelles-Environnement-Couleur-300x237.png\")",
+      "Bash(curl -sL -o logo-bonnevie.png \"https://450ppm.eu/wp-content/uploads/2024/11/bonnevie_logo.png\")",
+      "Bash(curl -sL -o logo-molenbeek.png \"https://450ppm.eu/wp-content/uploads/2025/01/Molenbeek-1-300x286.png\")",
+      "Bash(curl -sL -o logo-urban.png \"https://450ppm.eu/wp-content/uploads/2025/01/urbanbrussels-300x151.png\")",
+      "Bash(curl -sL -o logo-450ppm.png \"https://450ppm.eu/wp-content/uploads/2024/11/Logo-450PPM.png\")",
+      "Bash(curl -skL -o logo-bruxelles-env.png \"https://450ppm.eu/wp-content/uploads/2025/01/Bruxelles-Environnement-Couleur-300x237.png\")",
+      "Bash(curl -skL -o logo-bonnevie.png \"https://450ppm.eu/wp-content/uploads/2024/11/bonnevie_logo.png\")",
+      "Bash(curl -skL -o logo-molenbeek.png \"https://450ppm.eu/wp-content/uploads/2025/01/Molenbeek-1-300x286.png\")",
+      "Bash(curl -skL -o logo-urban.png \"https://450ppm.eu/wp-content/uploads/2025/01/urbanbrussels-300x151.png\")",
+      "Bash(curl -skL -o logo-450ppm.png \"https://450ppm.eu/wp-content/uploads/2024/11/Logo-450PPM.png\")",
+      "Bash(ls -la \"E:/DEPLOY/Beaba-front/public/logo-\"*)"
     ]
   }
 }
