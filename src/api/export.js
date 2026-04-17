@@ -7,6 +7,7 @@
 const { Router } = require('express');
 const archiver = require('archiver');
 const { getDb } = require('../db');
+const { generateReport } = require('../report/generator');
 
 const router = Router();
 
@@ -121,7 +122,8 @@ router.get('/:campaignId/csv', (req, res) => {
   }
 
   const household = data.campaign[0].household.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `beaba_export_${household}.zip`;
+  const date = new Date().toISOString().slice(0, 10);
+  const filename = `beaba_${household}_${date}.zip`;
 
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -132,13 +134,42 @@ router.get('/:campaignId/csv', (req, res) => {
   // BOM UTF-8 pour Excel
   const bom = '\ufeff';
 
-  archive.append(bom + toCsv(data.campaign), { name: 'campagne.csv' });
-  archive.append(bom + toCsv(data.rooms), { name: 'pieces.csv' });
-  archive.append(bom + toCsv(data.temp_sensors), { name: 'capteurs_temp.csv' });
-  archive.append(bom + toCsv(data.plugs), { name: 'prises.csv' });
-  archive.append(bom + toCsv(data.readings_temp), { name: 'releves_temperature.csv' });
-  archive.append(bom + toCsv(data.readings_power), { name: 'releves_puissance.csv' });
-  archive.append(bom + toCsv(data.readings_co2), { name: 'releves_co2.csv' });
+  // Donnees brutes (CSV)
+  archive.append(bom + toCsv(data.campaign), { name: 'donnees/campagne.csv' });
+  archive.append(bom + toCsv(data.rooms), { name: 'donnees/pieces.csv' });
+  archive.append(bom + toCsv(data.temp_sensors), { name: 'donnees/capteurs_temp.csv' });
+  archive.append(bom + toCsv(data.plugs), { name: 'donnees/prises.csv' });
+  archive.append(bom + toCsv(data.readings_temp), { name: 'donnees/releves_temperature.csv' });
+  archive.append(bom + toCsv(data.readings_power), { name: 'donnees/releves_puissance.csv' });
+  archive.append(bom + toCsv(data.readings_co2), { name: 'donnees/releves_co2.csv' });
+
+  // Rapport JSON aggrege
+  try {
+    const report = generateReport(req.params.campaignId);
+    if (report) {
+      archive.append(JSON.stringify(report, null, 2), { name: 'rapport.json' });
+    }
+  } catch (err) {
+    console.error('[Export] Erreur generation rapport :', err.message);
+  }
+
+  // README
+  const readme = `Archive Beaba — ${data.campaign[0].household}
+Date d'export : ${new Date().toLocaleDateString('fr-FR')}
+
+Contenu :
+- donnees/ : fichiers CSV des releves bruts (ouvrables avec Excel)
+- rapport.json : rapport aggrege (statistiques, top consommateurs, confort)
+
+Pour le rapport PDF :
+1. Connectez-vous sur https://beaba.450ppm.be
+2. Sur la page du rapport, cliquez sur "Telecharger PDF"
+3. Imprimez la page en choisissant "Enregistrer en PDF"
+
+Beaba — Comprendre son habitat
+https://450ppm.be
+`;
+  archive.append(readme, { name: 'LISEZ-MOI.txt' });
 
   archive.finalize();
 });
