@@ -25,7 +25,27 @@ const routes   = require('./api/routes');
 // ── Express ───────────────────────────────────────────────────────────
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
+
+// CORS : accepter les origines autorisees (pour cross-domain avec cookies)
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Pas d'origin (requete same-origin ou curl) = autoriser
+    if (!origin) return callback(null, true);
+    // Si CORS_ORIGINS defini, verifier la liste
+    if (allowedOrigins.length > 0) {
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS refuse pour ${origin}`));
+    }
+    // Sinon, accepter tout (dev)
+    callback(null, true);
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(cookieParser());
 app.use('/api', routes);

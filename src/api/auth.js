@@ -27,9 +27,10 @@ router.post('/login', async (req, res) => {
 
   db.prepare('INSERT INTO auth_tokens (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user.id, expiresAt);
 
-  const baseUrl = `${req.protocol}://${req.get('host')}/api`;
+  // Le lien pointe vers l'API (backend), pas le frontend
+  const apiBase = process.env.API_PUBLIC_URL || `${req.protocol}://${req.get('host')}/api`;
   try {
-    await sendMagicLink(email, token, baseUrl);
+    await sendMagicLink(email, token, apiBase);
   } catch (err) {
     console.error('[Auth] Erreur envoi email :', err.message);
     return res.status(500).json({ error: 'Erreur envoi email' });
@@ -57,19 +58,34 @@ router.get('/verify', (req, res) => {
 
   const jwt = sign({ id: row.user_id, email: row.email, name: row.name, role: row.role });
 
-  res.cookie('beaba_token', jwt, {
+  // Cookie cross-domain si COOKIE_DOMAIN defini (ex: .450ppm.be)
+  const cookieOpts = {
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    sameSite: 'lax',
     path: '/',
-  });
+  };
+  if (process.env.COOKIE_DOMAIN) {
+    cookieOpts.domain = process.env.COOKIE_DOMAIN;
+    cookieOpts.sameSite = 'none';
+    cookieOpts.secure = true;
+  } else {
+    cookieOpts.sameSite = 'lax';
+  }
+  res.cookie('beaba_token', jwt, cookieOpts);
 
-  res.redirect('/app');
+  const frontendUrl = process.env.FRONTEND_URL || '';
+  res.redirect(`${frontendUrl}/app`);
 });
 
 // POST /logout — supprimer le cookie
 router.post('/logout', (req, res) => {
-  res.clearCookie('beaba_token', { path: '/' });
+  const opts = { path: '/' };
+  if (process.env.COOKIE_DOMAIN) {
+    opts.domain = process.env.COOKIE_DOMAIN;
+    opts.sameSite = 'none';
+    opts.secure = true;
+  }
+  res.clearCookie('beaba_token', opts);
   res.json({ ok: true });
 });
 

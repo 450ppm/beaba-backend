@@ -65,7 +65,8 @@
       "Bash(curl -skL -o logo-molenbeek.png \"https://450ppm.eu/wp-content/uploads/2025/01/Molenbeek-1-300x286.png\")",
       "Bash(curl -skL -o logo-urban.png \"https://450ppm.eu/wp-content/uploads/2025/01/urbanbrussels-300x151.png\")",
       "Bash(curl -skL -o logo-450ppm.png \"https://450ppm.eu/wp-content/uploads/2024/11/Logo-450PPM.png\")",
-      "Bash(ls -la \"E:/DEPLOY/Beaba-front/public/logo-\"*)"
+      "Bash(ls -la \"E:/DEPLOY/Beaba-front/public/logo-\"*)",
+      "Bash(cat)"
     ]
   }
 }
