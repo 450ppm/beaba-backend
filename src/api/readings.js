@@ -176,6 +176,48 @@ router.get('/temp/history', (req, res) => {
   res.json(rows);
 });
 
+// GET /co2/history — historique CO2 pour graphiques
+router.get('/co2/history', (req, res) => {
+  const db = getDb();
+  const campaignId = req.campaign.id;
+  const { sensor_id, interval } = req.query;
+  const groupBy = interval === 'day' ? 'date' : 'hour';
+
+  const now = new Date();
+  const from = req.query.from || new Date(now.getTime() - 86400000).toISOString();
+  const to   = req.query.to   || now.toISOString();
+
+  const timeExpr = groupBy === 'date'
+    ? "date(r.ts)"
+    : "strftime('%Y-%m-%d %H:00:00', r.ts)";
+
+  let sql = `
+    SELECT
+      ${timeExpr} AS ts,
+      r.sensor_id,
+      s.name AS sensor_name,
+      rm.name AS room_name,
+      ROUND(AVG(r.co2_ppm)) AS co2_ppm
+    FROM readings_co2 r
+    INNER JOIN co2_sensors s ON s.id = r.sensor_id
+    LEFT JOIN rooms rm ON rm.id = s.room_id
+    WHERE r.campaign_id = ?
+      AND r.ts >= ?
+      AND r.ts <= ?
+  `;
+  const params = [campaignId, from, to];
+
+  if (sensor_id) {
+    sql += ' AND r.sensor_id = ?';
+    params.push(sensor_id);
+  }
+
+  sql += ` GROUP BY ${timeExpr}, r.sensor_id ORDER BY ts ASC`;
+
+  const rows = db.prepare(sql).all(...params);
+  res.json(rows);
+});
+
 // GET /power/realtime — dernières N minutes de puissance pour graphique temps reel
 router.get('/power/realtime', (req, res) => {
   const db = getDb();
