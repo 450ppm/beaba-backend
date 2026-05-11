@@ -33,6 +33,14 @@ function start(mqttClient) {
         mqttClient.publish(`zigbee2mqtt/${s.friendly_name}/get`, JSON.stringify({ temperature: '', humidity: '' }));
       }
     });
+
+    // Poll les capteurs CO2
+    const co2Sensors = db.prepare('SELECT friendly_name FROM co2_sensors WHERE campaign_id = ?').all(campaign.id);
+    co2Sensors.forEach((s) => {
+      if (s.friendly_name) {
+        mqttClient.publish(`zigbee2mqtt/${s.friendly_name}/get`, JSON.stringify({ co2: '', temperature: '', humidity: '' }));
+      }
+    });
   }
 
   // Premier poll apres 5 secondes
