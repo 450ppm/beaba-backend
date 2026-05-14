@@ -70,7 +70,9 @@ router.get('/map', requireAuth, requireActiveCampaign, (req, res) => {
   const plugsList = db.prepare('SELECT * FROM plugs WHERE campaign_id = ?').all(campaignId);
 
   const latestCo2 = db.prepare(`
-    SELECT s.room_id, c.co2_ppm, c.temperature_c, c.humidity_pct, c.ts
+    SELECT s.room_id,
+           (c.co2_ppm + COALESCE(s.calibration_offset_ppm, 0)) AS co2_ppm,
+           c.temperature_c, c.humidity_pct, c.ts
     FROM readings_co2 c
     INNER JOIN co2_sensors s ON s.id = c.sensor_id
     WHERE c.campaign_id = ?

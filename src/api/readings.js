@@ -27,12 +27,17 @@ router.get('/temp', (req, res) => {
   res.json(rows);
 });
 
-// GET /co2 — dernier releve CO2
+// GET /co2 — dernier releve CO2 (offset de calibration applique)
 router.get('/co2', (req, res) => {
   const db = getDb();
   const campaignId = req.campaign.id;
   const rows = db.prepare(`
-    SELECT c.*, s.name AS sensor_name, s.room_id
+    SELECT c.id, c.sensor_id, c.campaign_id, c.ts,
+           (c.co2_ppm + COALESCE(s.calibration_offset_ppm, 0)) AS co2_ppm,
+           c.co2_ppm AS co2_ppm_raw,
+           c.temperature_c, c.humidity_pct, c.battery_pct, c.synced,
+           s.name AS sensor_name, s.room_id,
+           COALESCE(s.calibration_offset_ppm, 0) AS calibration_offset_ppm
     FROM readings_co2 c
     INNER JOIN co2_sensors s ON s.id = c.sensor_id
     WHERE c.campaign_id = ?
@@ -197,7 +202,7 @@ router.get('/co2/history', (req, res) => {
       r.sensor_id,
       s.name AS sensor_name,
       rm.name AS room_name,
-      ROUND(AVG(r.co2_ppm)) AS co2_ppm
+      ROUND(AVG(r.co2_ppm) + COALESCE(s.calibration_offset_ppm, 0)) AS co2_ppm
     FROM readings_co2 r
     INNER JOIN co2_sensors s ON s.id = r.sensor_id
     LEFT JOIN rooms rm ON rm.id = s.room_id

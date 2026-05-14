@@ -91,12 +91,16 @@ function runMigration(database) {
     -- ── Capteur CO2 (Heiman HS3AQ) ────────────────────────────────────
 
     CREATE TABLE IF NOT EXISTS co2_sensors (
-      id            TEXT PRIMARY KEY,
-      campaign_id   TEXT NOT NULL REFERENCES campaigns(id),
-      room_id       TEXT REFERENCES rooms(id),
-      name          TEXT NOT NULL,
-      friendly_name TEXT NOT NULL,
-      comment       TEXT
+      id                      TEXT PRIMARY KEY,
+      campaign_id             TEXT NOT NULL REFERENCES campaigns(id),
+      room_id                 TEXT REFERENCES rooms(id),
+      name                    TEXT NOT NULL,
+      friendly_name           TEXT NOT NULL,
+      comment                 TEXT,
+      calibration_offset_ppm  REAL NOT NULL DEFAULT 0,
+      calibration_at          TEXT,
+      calibration_raw_ppm     REAL,
+      calibration_ref_ppm     REAL
     );
 
     -- ── Prises de mesure ──────────────────────────────────────────────
@@ -226,6 +230,22 @@ function runMigration(database) {
   const plugCols = database.prepare("PRAGMA table_info(plugs)").all();
   if (!plugCols.some((c) => c.name === 'is_multiprise')) {
     database.exec("ALTER TABLE plugs ADD COLUMN is_multiprise INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Colonnes de calibration CO2 (ajout en cours de vie du projet).
+  const co2Cols = database.prepare("PRAGMA table_info(co2_sensors)").all();
+  const hasCol = (n) => co2Cols.some((c) => c.name === n);
+  if (!hasCol('calibration_offset_ppm')) {
+    database.exec("ALTER TABLE co2_sensors ADD COLUMN calibration_offset_ppm REAL NOT NULL DEFAULT 0");
+  }
+  if (!hasCol('calibration_at')) {
+    database.exec("ALTER TABLE co2_sensors ADD COLUMN calibration_at TEXT");
+  }
+  if (!hasCol('calibration_raw_ppm')) {
+    database.exec("ALTER TABLE co2_sensors ADD COLUMN calibration_raw_ppm REAL");
+  }
+  if (!hasCol('calibration_ref_ppm')) {
+    database.exec("ALTER TABLE co2_sensors ADD COLUMN calibration_ref_ppm REAL");
   }
 
   // Seed admin user
