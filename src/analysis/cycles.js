@@ -254,9 +254,141 @@ function analyzeCycles(cycles, roomTempSamples = [], opts = {}) {
   };
 }
 
+/**
+ * Analyse specifique chauffe-eau / cuve d'ECS.
+ *
+ *  - Detection des **soutirages** : chutes brutales de temperature (> minDropC
+ *    en moins de maxDropMin minutes).
+ *  - **Pertes au repos** : pente moyenne de la temperature entre deux cycles
+ *    (= entre la fin d'une recharge et le debut de la suivante, hors soutirages).
+ *  - **Recharges** : ce sont simplement les cycles detectes par detectCycles.
+ *
+ * @param {Array<{ts:string, temperature_c:number}>} samples
+ * @param {Array<Cycle>} cycles — sortie de detectCycles
+ * @param {object} [opts]
+ */
+function analyzeDhw(samples, cycles = [], opts = {}) {
+  const minDropC = opts.minDropC || 3;       // chute mini pour un soutirage
+  const maxDropMin = opts.maxDropMin || 6;   // duree max d'un soutirage
+  const settleMin = opts.settleMin || 5;     // delai apres fin de cycle avant calcul pertes
+
+  if (!samples.length) {
+    return {
+      soutirages_count: 0,
+      soutirages: [],
+      resting_loss_c_per_h: null,
+      resting_window_min: 0,
+      recharges_count: cycles.length,
+      avg_recharge_duration_min: cycles.length ? round(mean(cycles.map((c) => c.total_duration_min)), 1) : null,
+      avg_recharge_peak_c: cycles.length ? round(mean(cycles.map((c) => c.peak_c)), 1) : null,
+      diagnosis: ['Pas de mesures sur la periode.'],
+    };
+  }
+
+  const pts = samples
+    .map((s) => ({ t: new Date(s.ts).getTime(), c: s.temperature_c }))
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.c))
+    .sort((a, b) => a.t - b.t);
+
+  // ── Soutirages : balayage glissant, on cherche des chutes rapides ─
+  const soutirages = [];
+  const winMs = maxDropMin * 60000;
+  for (let i = 0; i < pts.length; i++) {
+    const start = pts[i];
+    // Cherche le min dans la fenetre suivante
+    let minP = start;
+    let j = i + 1;
+    while (j < pts.length && pts[j].t - start.t <= winMs) {
+      if (pts[j].c < minP.c) minP = pts[j];
+      j += 1;
+    }
+    const drop = start.c - minP.c;
+    if (drop >= minDropC) {
+      soutirages.push({
+        start_ts: new Date(start.t).toISOString(),
+        end_ts: new Date(minP.t).toISOString(),
+        from_c: round(start.c, 1),
+        to_c: round(minP.c, 1),
+        drop_c: round(drop, 1),
+        duration_min: round((minP.t - start.t) / 60000, 1),
+      });
+      // Skip jusqu'a la fin du soutirage pour eviter les doublons
+      while (i < pts.length - 1 && pts[i].t < minP.t) i += 1;
+    }
+  }
+
+  // ── Pertes au repos : pente entre deux cycles, hors soutirages ───
+  // On collecte tous les "intervalles de repos" : entre fin de cycle (+ settleMin)
+  // et debut du cycle suivant, et qui ne contiennent pas de soutirage.
+  let totalLossCPerH = 0;
+  let totalLossWindowMin = 0;
+  const soutirageRanges = soutirages.map((s) => [
+    new Date(s.start_ts).getTime(),
+    new Date(s.end_ts).getTime(),
+  ]);
+  for (let i = 0; i < cycles.length - 1; i++) {
+    const endMs = new Date(cycles[i].end_ts).getTime() + settleMin * 60000;
+    const startMs = new Date(cycles[i + 1].start_ts).getTime();
+    if (startMs <= endMs) continue;
+    // Verifie qu'il n'y a pas de soutirage dans cet intervalle
+    const overlaps = soutirageRanges.some(([s, e]) => !(e < endMs || s > startMs));
+    if (overlaps) continue;
+    // Prend le 1er point apres endMs et le dernier avant startMs
+    const inWindow = pts.filter((p) => p.t >= endMs && p.t <= startMs);
+    if (inWindow.length < 4) continue;
+    const first = inWindow[0];
+    const last = inWindow[inWindow.length - 1];
+    const dtHours = (last.t - first.t) / 3600000;
+    if (dtHours < 0.5) continue;
+    const lossCPerH = (first.c - last.c) / dtHours;
+    if (lossCPerH > -0.5 && lossCPerH < 5) {
+      // garde-fou : taux raisonnable seulement (-0.5 a 5 °C/h)
+      totalLossCPerH += lossCPerH * dtHours;
+      totalLossWindowMin += dtHours * 60;
+    }
+  }
+  const restingLoss = totalLossWindowMin > 0
+    ? round(totalLossCPerH / (totalLossWindowMin / 60), 2)
+    : null;
+
+  // ── Diagnostic ECS ────────────────────────────────────────────────
+  const diag = [];
+  if (cycles.length > 0) {
+    const avgPeak = mean(cycles.map((c) => c.peak_c));
+    diag.push(`${cycles.length} recharge(s) detectee(s), pic moyen ${avgPeak.toFixed(1)}°C.`);
+    if (avgPeak < 55) {
+      diag.push('Pic moyen < 55°C : attention au risque legionellose, monter la consigne au moins une fois par semaine au-dessus de 60°C.');
+    } else if (avgPeak > 65) {
+      diag.push(`Pic moyen ${avgPeak.toFixed(1)}°C : consigne elevee, baisser legerement pourrait reduire les pertes au repos.`);
+    }
+  }
+  if (soutirages.length > 0) {
+    const totalDrop = soutirages.reduce((s, x) => s + x.drop_c, 0);
+    diag.push(`${soutirages.length} soutirage(s) detectes (chute cumulee ${totalDrop.toFixed(0)}°C).`);
+  } else {
+    diag.push('Aucun soutirage detecte sur la periode.');
+  }
+  if (restingLoss != null) {
+    diag.push(`Pertes au repos : ${restingLoss.toFixed(2)}°C/h. ${restingLoss < 0.4 ? 'Ballon bien isole.' : restingLoss < 1 ? 'Isolation correcte.' : 'Pertes importantes — verifier l\'isolation du ballon.'}`);
+  } else {
+    diag.push('Pas assez d\'intervalles de repos pour estimer les pertes (besoin d\'au moins 30 min entre deux recharges).');
+  }
+
+  return {
+    soutirages_count: soutirages.length,
+    soutirages,
+    resting_loss_c_per_h: restingLoss,
+    resting_window_min: round(totalLossWindowMin, 1),
+    recharges_count: cycles.length,
+    avg_recharge_duration_min: cycles.length ? round(mean(cycles.map((c) => c.total_duration_min)), 1) : null,
+    avg_recharge_peak_c: cycles.length ? round(mean(cycles.map((c) => c.peak_c)), 1) : null,
+    diagnosis: diag,
+  };
+}
+
 /* ── helpers ───────────────────────────────────────────────────────── */
 function mean(arr) { return arr.reduce((s, v) => s + v, 0) / arr.length; }
 function round(v, p = 2) { const m = Math.pow(10, p); return Math.round(v * m) / m; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-module.exports = { detectCycles, analyzeCycles, DEFAULT_OPTS };
+module.exports = { detectCycles, analyzeCycles, analyzeDhw, DEFAULT_OPTS };

@@ -8,7 +8,7 @@
 const { Router } = require('express');
 const { randomUUID } = require('crypto');
 const { getDb } = require('../db');
-const { detectCycles, analyzeCycles } = require('../analysis/cycles');
+const { detectCycles, analyzeCycles, analyzeDhw } = require('../analysis/cycles');
 
 const router = Router();
 
@@ -105,9 +105,16 @@ router.get('/cycles/:id', (req, res) => {
   res.json(detectCycles(rows));
 });
 
-// GET /analysis/:id?from=&to= — cycles + heuristiques + temperatures de piece
+// GET /analysis/:id?from=&to= — cycles + heuristiques. Branche par kind du capteur :
+//   - boiler_out / boiler_return / radiator -> heuristiques chauffage + correlation pieces
+//   - dhw_tank                              -> heuristiques ECS (pertes au repos, soutirages)
 router.get('/analysis/:id', (req, res) => {
   const db = getDb();
+  const sensor = db.prepare(
+    'SELECT * FROM pipe_sensors WHERE id = ? AND campaign_id = ?'
+  ).get(req.params.id, req.campaign.id);
+  if (!sensor) return res.status(404).json({ error: 'Capteur introuvable' });
+
   const now = new Date();
   const from = req.query.from || new Date(now.getTime() - 86400000).toISOString();
   const to = req.query.to || now.toISOString();
@@ -121,18 +128,25 @@ router.get('/analysis/:id', (req, res) => {
 
   const cycles = detectCycles(samples);
 
-  const roomTemps = db.prepare(`
-    SELECT t.ts, t.temperature_c, s.room_id
-    FROM readings_temp t
-    INNER JOIN temp_sensors s ON s.id = t.sensor_id
-    WHERE t.campaign_id = ? AND t.ts BETWEEN ? AND ?
-    ORDER BY t.ts ASC
-  `).all(req.campaign.id, from, to);
-
-  const analysis = analyzeCycles(cycles, roomTemps);
+  let analysis;
+  if (sensor.kind === 'dhw_tank') {
+    analysis = analyzeDhw(samples, cycles);
+  } else {
+    const roomTemps = db.prepare(`
+      SELECT t.ts, t.temperature_c, s.room_id
+      FROM readings_temp t
+      INNER JOIN temp_sensors s ON s.id = t.sensor_id
+      WHERE t.campaign_id = ? AND t.ts BETWEEN ? AND ?
+      ORDER BY t.ts ASC
+    `).all(req.campaign.id, from, to);
+    analysis = analyzeCycles(cycles, roomTemps);
+  }
 
   res.json({
     from, to,
+    sensor: {
+      id: sensor.id, name: sensor.name, kind: sensor.kind, color: sensor.color,
+    },
     sample_count: samples.length,
     samples_first_ts: samples[0]?.ts || null,
     samples_last_ts: samples[samples.length - 1]?.ts || null,
