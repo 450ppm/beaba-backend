@@ -110,6 +110,12 @@ const PARIS_THRESHOLD_PPM = 450;
 const PREINDUSTRIAL_PPM = 280;
 let _co2Cache = null; // { ts, data }
 
+// Convertit un enregistrement {year, month, day} en timestamp ms (UTC).
+function recordTs(r) {
+  if (!r || !r.year || !r.month) return null;
+  return Date.UTC(parseInt(r.year, 10), parseInt(r.month, 10) - 1, parseInt(r.day || 1, 10));
+}
+
 async function fetchAtmosphericCo2() {
   const now = Date.now();
   if (_co2Cache && now - _co2Cache.ts < 24 * 60 * 60 * 1000) {
@@ -117,6 +123,8 @@ async function fetchAtmosphericCo2() {
   }
   const fallback = {
     ppm: 426.5,
+    annual_increase_ppm: 2.5,
+    years_to_threshold: (PARIS_THRESHOLD_PPM - 426.5) / 2.5,
     source: 'fallback',
     sample_date: null,
     threshold_ppm: PARIS_THRESHOLD_PPM,
@@ -130,8 +138,39 @@ async function fetchAtmosphericCo2() {
     if (!recent) throw new Error('Pas de valeur recente');
     const ppm = parseFloat(recent.trend);
     if (!Number.isFinite(ppm) || ppm < 300 || ppm > 700) throw new Error(`ppm aberrant: ${recent.trend}`);
+
+    // Calcule le taux annuel d'augmentation a partir d'un point ~12 mois plus tot.
+    // On cherche l'enregistrement le plus proche de (recent - 12 mois).
+    const recentTs = recordTs(recent);
+    const targetTs = recentTs ? recentTs - 365.25 * 86400000 : null;
+    let annual = null;
+    if (targetTs) {
+      let best = null;
+      let bestDelta = Infinity;
+      for (const r of list) {
+        if (!r || r.trend == null) continue;
+        const ts = recordTs(r);
+        if (!ts) continue;
+        const delta = Math.abs(ts - targetTs);
+        if (delta < bestDelta) { best = r; bestDelta = delta; }
+      }
+      if (best && bestDelta < 60 * 86400000) {
+        const olderPpm = parseFloat(best.trend);
+        const olderTs = recordTs(best);
+        const yearsElapsed = (recentTs - olderTs) / (365.25 * 86400000);
+        if (yearsElapsed > 0.5 && Number.isFinite(olderPpm)) {
+          annual = (ppm - olderPpm) / yearsElapsed;
+        }
+      }
+    }
+    const annualIncrease = Number.isFinite(annual) && annual > 0 ? annual : 2.5; // fallback rate
+
+    const years = annualIncrease > 0 ? (PARIS_THRESHOLD_PPM - ppm) / annualIncrease : null;
+
     const data = {
       ppm,
+      annual_increase_ppm: annualIncrease,
+      years_to_threshold: years,
       source: 'noaa-mauna-loa',
       sample_date: `${recent.year}-${String(recent.month).padStart(2, '0')}-${String(recent.day || 1).padStart(2, '0')}`,
       threshold_ppm: PARIS_THRESHOLD_PPM,
