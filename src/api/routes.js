@@ -20,6 +20,7 @@ const report       = require('./report');
 const exportRouter = require('./export');
 const meters       = require('./meters');
 const comfort      = require('./comfort');
+const weather      = require('./weather');
 
 const router = Router();
 
@@ -40,6 +41,7 @@ router.use('/sensors',  requireAuth, requireActiveCampaign, sensors);
 router.use('/readings', requireAuth, requireActiveCampaign, readings);
 router.use('/meters',   requireAuth, requireActiveCampaign, meters);
 router.use('/comfort',  requireAuth, requireActiveCampaign, comfort);
+router.use('/weather',  requireAuth, weather);
 router.use('/zigbee',   requireAuth, zigbee);
 router.use('/report',   requireAuth, report);
 router.use('/export',   requireAuth, exportRouter);
