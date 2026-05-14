@@ -98,4 +98,51 @@ async function fetchHistorical(fromDate, toDate, opts = {}) {
   };
 }
 
-module.exports = { fetchCurrent, fetchHistorical, DEFAULT_LAT, DEFAULT_LON };
+/**
+ * CO2 atmospherique global (Mauna Loa, NOAA). Source : global-warming.org
+ * qui republie les valeurs NOAA en JSON simple, sans cle. Cache 24h car
+ * les valeurs evoluent de quelques dixiemes de ppm par mois.
+ *
+ * Si l'API est indisponible, on retourne une derniere valeur connue
+ * raisonnable pour 2026 (~426 ppm) afin que la carte reste affichable.
+ */
+const PARIS_THRESHOLD_PPM = 450;
+const PREINDUSTRIAL_PPM = 280;
+let _co2Cache = null; // { ts, data }
+
+async function fetchAtmosphericCo2() {
+  const now = Date.now();
+  if (_co2Cache && now - _co2Cache.ts < 24 * 60 * 60 * 1000) {
+    return _co2Cache.data;
+  }
+  const fallback = {
+    ppm: 426.5,
+    source: 'fallback',
+    sample_date: null,
+    threshold_ppm: PARIS_THRESHOLD_PPM,
+    preindustrial_ppm: PREINDUSTRIAL_PPM,
+  };
+  try {
+    const res = await axios.get('https://global-warming.org/api/co2-api', { timeout: 6000 });
+    const list = res.data?.co2 || [];
+    // On prend la valeur "trend" (desaisonnalisee) la plus recente.
+    const recent = list.slice(-30).reverse().find((r) => r && r.trend != null);
+    if (!recent) throw new Error('Pas de valeur recente');
+    const ppm = parseFloat(recent.trend);
+    if (!Number.isFinite(ppm) || ppm < 300 || ppm > 700) throw new Error(`ppm aberrant: ${recent.trend}`);
+    const data = {
+      ppm,
+      source: 'noaa-mauna-loa',
+      sample_date: `${recent.year}-${String(recent.month).padStart(2, '0')}-${String(recent.day || 1).padStart(2, '0')}`,
+      threshold_ppm: PARIS_THRESHOLD_PPM,
+      preindustrial_ppm: PREINDUSTRIAL_PPM,
+    };
+    _co2Cache = { ts: now, data };
+    return data;
+  } catch (err) {
+    if (_co2Cache) return { ...(_co2Cache.data), stale: true };
+    return { ...fallback, error: String(err.message || err) };
+  }
+}
+
+module.exports = { fetchCurrent, fetchHistorical, fetchAtmosphericCo2, DEFAULT_LAT, DEFAULT_LON };

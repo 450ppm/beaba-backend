@@ -19,6 +19,16 @@ router.get('/current', async (_req, res) => {
   }
 });
 
+// GET /co2_atmospheric — concentration globale (Mauna Loa NOAA)
+router.get('/co2_atmospheric', async (_req, res) => {
+  try {
+    const data = await weather.fetchAtmosphericCo2();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: 'CO2 atmospherique indisponible', detail: String(err.message || err) });
+  }
+});
+
 // GET /history?from=YYYY-MM-DD&to=YYYY-MM-DD&interval=hourly|daily
 // Renvoie la serie temporelle exterieure pour correlation avec les releves.
 router.get('/history', async (req, res) => {
