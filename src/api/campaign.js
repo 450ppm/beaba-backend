@@ -154,6 +154,7 @@ router.post('/wipe', (req, res) => {
   const tables = [
     'auth_tokens',
     'readings_temp', 'readings_co2', 'readings_power', 'meter_readings',
+    'plug_appliances',
     'plugs', 'temp_sensors', 'co2_sensors', 'rooms', 'campaigns', 'users'
   ];
   db.exec('PRAGMA foreign_keys = OFF');

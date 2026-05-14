@@ -47,7 +47,7 @@ router.get('/power', (req, res) => {
   const campaignId = req.campaign.id;
   const rows = db.prepare(`
     SELECT r.id, r.plug_id, r.campaign_id, r.ts, r.power_w, r.energy_kwh, r.synced,
-           p.appliance_name, p.room_id, p.source
+           p.appliance_name, p.room_id, p.source, p.is_multiprise
     FROM readings_power r
     INNER JOIN plugs p ON p.id = r.plug_id
     WHERE r.campaign_id = ?

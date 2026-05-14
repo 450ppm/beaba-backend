@@ -111,7 +111,21 @@ function runMigration(database) {
       appliance_name  TEXT NOT NULL,
       rated_power_w   INTEGER,
       sort_order      INTEGER NOT NULL DEFAULT 0,
-      energy_offset_kwh REAL DEFAULT 0
+      energy_offset_kwh REAL DEFAULT 0,
+      is_multiprise   INTEGER NOT NULL DEFAULT 0
+    );
+
+    -- ── Appareils branches sur une prise (1..N par prise) ──────────────
+
+    CREATE TABLE IF NOT EXISTS plug_appliances (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      plug_id       TEXT NOT NULL REFERENCES plugs(id) ON DELETE CASCADE,
+      name          TEXT NOT NULL,
+      category      TEXT,
+      rated_power_w INTEGER,
+      always_on     INTEGER NOT NULL DEFAULT 0,
+      control_type  TEXT,
+      sort_order    INTEGER NOT NULL DEFAULT 0
     );
 
     -- ── Releves temperature / humidite ────────────────────────────────
@@ -176,7 +190,15 @@ function runMigration(database) {
     CREATE INDEX IF NOT EXISTS idx_rpow_plug      ON readings_power(plug_id, ts);
     CREATE INDEX IF NOT EXISTS idx_rpow_synced    ON readings_power(synced, ts);
     CREATE INDEX IF NOT EXISTS idx_campaign_status ON campaigns(status);
+    CREATE INDEX IF NOT EXISTS idx_plug_appliances_plug ON plug_appliances(plug_id);
   `);
+
+  // ── Migrations idempotentes pour bases existantes ──────────────────
+  // Ajoute is_multiprise si la colonne n'existe pas encore.
+  const plugCols = database.prepare("PRAGMA table_info(plugs)").all();
+  if (!plugCols.some((c) => c.name === 'is_multiprise')) {
+    database.exec("ALTER TABLE plugs ADD COLUMN is_multiprise INTEGER NOT NULL DEFAULT 0");
+  }
 
   // Seed admin user
   database.prepare(`
