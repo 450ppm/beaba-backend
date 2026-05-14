@@ -18,6 +18,7 @@ const cron     = require('node-cron');
 const mqtt     = require('./mqtt/subscriber');
 const poller   = require('./mqtt/poller');
 const shelly   = require('./mqtt/shelly');
+const shellyPlus = require('./mqtt/shellyPlus');
 const { run: syncInflux } = require('./sync/influx');
 const { getActiveCampaign } = require('./db');
 const routes   = require('./api/routes');
@@ -80,6 +81,7 @@ setTimeout(() => {
   if (mqttClient) poller.start(mqttClient);
 }, 3000);
 shelly.start();
+shellyPlus.start();
 
 // Sync InfluxDB — toutes les SYNC_INTERVAL_MIN minutes
 const syncMin = parseInt(process.env.SYNC_INTERVAL_MIN, 10) || 5;
@@ -97,5 +99,5 @@ app.listen(port, '0.0.0.0', () => {
 
 // ── Arret propre ──────────────────────────────────────────────────────
 
-process.on('SIGTERM', () => { mqtt.stop(); poller.stop(); shelly.stop(); process.exit(0); });
-process.on('SIGINT',  () => { mqtt.stop(); poller.stop(); shelly.stop(); process.exit(0); });
+process.on('SIGTERM', () => { mqtt.stop(); poller.stop(); shelly.stop(); shellyPlus.stop(); process.exit(0); });
+process.on('SIGINT',  () => { mqtt.stop(); poller.stop(); shelly.stop(); shellyPlus.stop(); process.exit(0); });

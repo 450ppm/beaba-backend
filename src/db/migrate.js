@@ -193,6 +193,34 @@ function runMigration(database) {
     CREATE INDEX IF NOT EXISTS idx_plug_appliances_plug ON plug_appliances(plug_id);
   `);
 
+  // ── Capteurs sur tuyaux / cuves (analyse chaudiere, ECS) ───────────
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS pipe_sensors (
+      id              TEXT PRIMARY KEY,
+      campaign_id     TEXT NOT NULL REFERENCES campaigns(id),
+      name            TEXT NOT NULL,
+      kind            TEXT NOT NULL CHECK(kind IN ('boiler_out','boiler_return','dhw_tank','radiator')) DEFAULT 'boiler_out',
+      shelly_ip       TEXT,
+      shelly_channel  INTEGER NOT NULL DEFAULT 100,
+      color           TEXT NOT NULL DEFAULT '#f59e0b',
+      sort_order      INTEGER NOT NULL DEFAULT 0,
+      baseline_c      REAL DEFAULT 30,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS readings_pipe_temp (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      sensor_id     TEXT NOT NULL REFERENCES pipe_sensors(id),
+      campaign_id   TEXT NOT NULL,
+      ts            TEXT NOT NULL DEFAULT (datetime('now')),
+      temperature_c REAL,
+      synced        INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_rpipe_sensor ON readings_pipe_temp(sensor_id, ts);
+    CREATE INDEX IF NOT EXISTS idx_rpipe_synced ON readings_pipe_temp(synced, ts);
+  `);
+
   // ── Migrations idempotentes pour bases existantes ──────────────────
   // Ajoute is_multiprise si la colonne n'existe pas encore.
   const plugCols = database.prepare("PRAGMA table_info(plugs)").all();
