@@ -36,13 +36,14 @@ router.post('/temp', (req, res) => {
 router.put('/temp/:id', (req, res) => {
   const { room_id, name, comment } = req.body;
   const db = getDb();
+  const hasRoom = Object.prototype.hasOwnProperty.call(req.body, 'room_id');
   db.prepare(`
     UPDATE temp_sensors SET
-      room_id = COALESCE(?, room_id),
+      room_id = CASE WHEN ? = 1 THEN ? ELSE room_id END,
       name    = COALESCE(?, name),
       comment = COALESCE(?, comment)
     WHERE id = ? AND campaign_id = ?
-  `).run(room_id, name, comment, req.params.id, req.campaign.id);
+  `).run(hasRoom ? 1 : 0, room_id || null, name, comment, req.params.id, req.campaign.id);
   res.json({ ok: true });
 });
 
@@ -79,13 +80,14 @@ router.post('/co2', (req, res) => {
 router.put('/co2/:id', (req, res) => {
   const { room_id, name, comment } = req.body;
   const db = getDb();
+  const hasRoom = Object.prototype.hasOwnProperty.call(req.body, 'room_id');
   db.prepare(`
     UPDATE co2_sensors SET
-      room_id = COALESCE(?, room_id),
+      room_id = CASE WHEN ? = 1 THEN ? ELSE room_id END,
       name    = COALESCE(?, name),
       comment = COALESCE(?, comment)
     WHERE id = ? AND campaign_id = ?
-  `).run(room_id, name, comment, req.params.id, req.campaign.id);
+  `).run(hasRoom ? 1 : 0, room_id || null, name, comment, req.params.id, req.campaign.id);
   res.json({ ok: true });
 });
 

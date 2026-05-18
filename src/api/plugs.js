@@ -57,16 +57,20 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   const { room_id, appliance_name, rated_power_w, sort_order, is_multiprise } = req.body;
   const db = getDb();
+  // room_id explicitement present (meme null/"" => detacher la prise).
+  const hasRoom = Object.prototype.hasOwnProperty.call(req.body, 'room_id');
+  const roomVal = room_id || null; // "" -> null
   db.prepare(`
     UPDATE plugs SET
-      room_id        = COALESCE(?, room_id),
+      room_id        = CASE WHEN ? = 1 THEN ? ELSE room_id END,
       appliance_name = COALESCE(?, appliance_name),
       rated_power_w  = COALESCE(?, rated_power_w),
       sort_order     = COALESCE(?, sort_order),
       is_multiprise  = COALESCE(?, is_multiprise)
     WHERE id = ? AND campaign_id = ?
   `).run(
-    room_id,
+    hasRoom ? 1 : 0,
+    roomVal,
     appliance_name,
     rated_power_w,
     sort_order,
