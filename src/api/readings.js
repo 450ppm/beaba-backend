@@ -15,9 +15,10 @@ router.get('/temp', (req, res) => {
   const campaignId = req.campaign.id;
   const rows = db.prepare(`
     SELECT t.id, t.sensor_id, t.campaign_id, t.ts, t.temperature_c, t.humidity_pct, t.battery_pct, t.synced,
-           s.name AS sensor_name, s.room_id
+           s.name AS sensor_name, s.room_id, rm.name AS room_name
     FROM readings_temp t
     INNER JOIN temp_sensors s ON s.id = t.sensor_id
+    LEFT JOIN rooms rm ON rm.id = s.room_id
     WHERE t.campaign_id = ?
       AND t.id = (
         SELECT t2.id FROM readings_temp t2 WHERE t2.sensor_id = t.sensor_id AND t2.campaign_id = ? ORDER BY t2.ts DESC, t2.id DESC LIMIT 1
@@ -37,9 +38,11 @@ router.get('/co2', (req, res) => {
            c.co2_ppm AS co2_ppm_raw,
            c.temperature_c, c.humidity_pct, c.battery_pct, c.synced,
            s.name AS sensor_name, s.room_id,
-           COALESCE(s.calibration_offset_ppm, 0) AS calibration_offset_ppm
+           COALESCE(s.calibration_offset_ppm, 0) AS calibration_offset_ppm,
+           rm.name AS room_name
     FROM readings_co2 c
     INNER JOIN co2_sensors s ON s.id = c.sensor_id
+    LEFT JOIN rooms rm ON rm.id = s.room_id
     WHERE c.campaign_id = ?
       AND c.ts = (SELECT MAX(c2.ts) FROM readings_co2 c2 WHERE c2.sensor_id = c.sensor_id)
   `).all(campaignId);
