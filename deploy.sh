@@ -13,12 +13,15 @@ echo "=== Installation des dependances ==="
 npm install --omit=dev
 
 echo "=== Migration base de donnees ==="
-# Ne pas supprimer la base sauf si --wipe est passe
+# --wipe : repart de zero. Sinon on lance quand meme la migration :
+# elle est idempotente (CREATE TABLE IF NOT EXISTS + ALTER gardes par
+# PRAGMA table_info) donc sans risque pour les donnees, et indispensable
+# quand un nouveau deploiement ajoute une colonne (ex: calibration CO2).
 if [ "$1" = "--wipe" ]; then
   echo "!!! WIPE: suppression de la base de donnees !!!"
   rm -f data/beaba.db
-  node src/db/migrate.js
 fi
+node src/db/migrate.js
 
 echo "=== Redemarrage du service ==="
 sudo systemctl restart beaba
