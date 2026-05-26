@@ -133,7 +133,7 @@ function computeEnergy(db, campaignId, durationDays) {
     // Utiliser energy_kwh corrige par l'offset de debut de campagne
     // Conso reelle = energy_kwh_actuel - energy_offset_kwh
     dailySeries = db.prepare(`
-      SELECT date(ts) AS date,
+      SELECT day_date AS date,
         SUM(day_kwh) AS kwh
       FROM (
         SELECT rp.plug_id, date(rp.ts) AS day_date,
